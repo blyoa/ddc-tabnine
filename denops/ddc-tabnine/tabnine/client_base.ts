@@ -1,11 +1,12 @@
 import {
   assert,
-  decompress,
+  BlobWriter,
   fs,
   Mutex,
   path,
   semver,
   TextLineStream,
+  ZipReader,
 } from "../deps.ts";
 
 export class TabNine {
@@ -136,11 +137,9 @@ export class TabNine {
         destFile.close();
       }
       try {
-        if (!(await decompress(zipPath, destDir))) {
-          throw new Error("failed to decompress a TabNine archive");
-        }
-      } catch (e: unknown) {
-        throw e;
+        await decompress(zipPath, destDir);
+      } catch (e) {
+        throw new Error("failed to decompress a TabNine archive", { cause: e });
       } finally {
         await Deno.remove(zipPath);
       }
@@ -287,6 +286,26 @@ export class TabNine {
     else if (a > b) return 1;
     else return 0;
   }
+}
+
+async function decompress(zipPath: string, destDir: string) {
+  using zipFile = await Deno.open(zipPath, { read: true });
+  const reader = new ZipReader(zipFile.readable);
+
+  for await (const entry of reader.getEntriesGenerator()) {
+    if (entry.directory) {
+      await Deno.mkdir(path.join(destDir, entry.filename), { recursive: true });
+      continue;
+    }
+    if (entry.getData !== undefined) {
+      const blob = await entry.getData(new BlobWriter());
+      await Deno.writeFile(
+        path.join(destDir, entry.filename),
+        blob.stream(),
+      );
+    }
+  }
+  reader.close();
 }
 
 // https://github.com/vim-denops/denops.vim/blob/17d20561e5eb45657235e92b94b4a9c690b85900/denops/%40denops/test/tester.ts#L176-L196
