@@ -131,7 +131,7 @@ export class TabNine {
         create: true,
       });
       try {
-        await res.body.pipeTo(destFile.writable);
+        await res.body.pipeTo(destFile.writable, { preventClose: true });
       } finally {
         destFile.close();
       }
